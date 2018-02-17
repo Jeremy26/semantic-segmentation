@@ -45,6 +45,11 @@ def load_vgg(sess, vgg_path):
 tests.test_load_vgg(load_vgg, tf)
 
 
+## BUILD THE DECODER
+## WE WILL DO THREE THINGS :
+# - 1x1 CONVOLUTION TO FIT OUR NUMBER OF CLASSES
+# - TRANSPOSED CONVOLUTIONS
+# - SKIP CONNECTIONS 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
     Create the layers for a fully convolutional network.  Build skip-layers using the vgg layers.
@@ -55,20 +60,39 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-    # 1x1 CONVOLUTION TO PRESERVE SPATIAL INFORMATION
-    conv_1x1 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1),padding='same',
-                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
     
+    # 1x1 CONVOLUTIONS
+    conv_1x1_7 = tf.layers.conv2d(vgg_layer7_out,num_classes,1,strides=(1,1),padding='same',
+                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    conv_1x1_4 = tf.layers.conv2d(vgg_layer4_out,num_classes,1,strides=(1,1),padding='same',
+                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    conv_1x1_3 = tf.layers.conv2d(vgg_layer3_out,num_classes,1,strides=(1,1),padding='same',
+                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+
     # UPSAMPLING TO ORIGINAL IMAGE SIZE
-    layer7_1 = tf.layers.conv2d_transpose(conv_1x1,num_classes,4,strides=(2,2),padding='same',
+    output7 = tf.layers.conv2d_transpose(conv_1x1_7,num_classes,4,strides=(2,2),padding='same',
                                 kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
     
-    
-    upsampled = tf.layers.conv2d_transpose(layer7_1,num_classes,4,strides=(2,2),padding='same',
+    ## SKIP CONNECTIONS
+    skipped7 = tf.add(output7,conv_1x1_4)
+
+    # UPSAMPLING TO ORIGINAL IMAGE SIZE
+    output4 = tf.layers.conv2d_transpose(skipped7,num_classes,4,strides=(2,2),padding='same',
                                 kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
     
+    ## SKIP CONNECTIONS
+    skipped4 = tf.add(output4,conv_1x1_3)
+
+    # UPSAMPLING TO ORIGINAL IMAGE SIZE
+    output3 = tf.layers.conv2d_transpose(skipped4,num_classes,16,strides=(8,8),padding='same',
+                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
     
-    return None
+    ### SCALING LAYERS
+#    pool3_out_scaled = tf.multiply(pool3_out, 0.0001, name=‘pool3_out_scaled’)
+#    pool4_out_scaled = tf.multiply(pool4_out, 0.01, name=‘pool4_out_scaled’)
+
+    return output3
+
 tests.test_layers(layers)
 
 
@@ -82,7 +106,13 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
     # TODO: Implement function
-    return None, None, None
+    logits = tf.reshape(nn_last_layer, (-1, num_classes))
+    correct_label = tf.reshape(correct_label, (-1,num_classes))
+    cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    optimizer = tf.train.AdamOptimizer(learning_rate= learning_rate)
+    train_op = optimizer.minimize(cross_entropy_loss)
+
+    return logits, train_op, cross_entropy_loss
 tests.test_optimize(optimize)
 
 
@@ -102,7 +132,16 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     # TODO: Implement function
-    pass
+    sess.run(tf.global_variables_initializer())
+
+    for epoch in range(epochs):
+        print("EPOCH {} ...".format(epoch+1))
+        for image,label in get_batches_fn(batch_size):
+            ## Training
+            _,loss = sess.run([train_op, cross_entropy_loss], 
+                               feed_dict={input_image: image, correct_label: label,keep_prob: 0.5, learning_rate: 0.0009})
+            print("Loss: = {:.3f}".format(loss))
+        print()
 tests.test_train_nn(train_nn)
 
 
@@ -121,6 +160,12 @@ def run():
     #  https://www.cityscapes-dataset.com/
 
     with tf.Session() as sess:
+        
+        correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
+        learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+        epochs = 6
+        batch_size = 5
+
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
         # Create function to get batches
@@ -130,12 +175,17 @@ def run():
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # TODO: Build NN using load_vgg, layers, and optimize function
-
+        input_image, keep_prob, layer_3_out, layer_4_out, layer_7_out = load_vgg(sess,vgg_path)
+        last_layer = layers(layer_3_out, layer_4_out, layer_7_out, num_classes)
+        logits, train_op, cross_entropy_loss = optimize(last_layer, correct_label, learning_rate, num_classes)
+        
         # TODO: Train NN using the train_nn function
-
+        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
+             correct_label, keep_prob, learning_rate)
+        
         # TODO: Save inference data using helper.save_inference_samples
         #  helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
-
+        helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
         # OPTIONAL: Apply the trained model to a video
 
 
