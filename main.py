@@ -17,16 +17,18 @@ if not tf.test.gpu_device_name():
 else:
     print('Default GPU Device: {}'.format(tf.test.gpu_device_name()))
 
-class Detection:
-    def __init__(self,sess, logits, keep_prob, saver, image, image_shape):
-        self.sess = sess
-        self.logits = logits
-        self.keep_prob = keep_prob
-        self.saver = saver
-        self.image = image
-        self.image_shape = image_shape
-
-    def load_vgg(sess, vgg_path):
+class Detection():
+    sess = tf.Session()
+    saver = tf.Variable(0)
+    graph = tf.get_default_graph()
+    image_pl = tf.Variable(0) 
+    keep_prob = 0.5
+    logits = tf.Variable(0)
+    image_shape = (160, 576)
+    def __init__(self):
+        pass
+    
+    def load_vgg(self, vgg_path):
         """
         Load Pretrained VGG Model into TensorFlow.
         :param sess: TensorFlow Session
@@ -42,7 +44,7 @@ class Detection:
         vgg_layer4_out_tensor_name = 'layer4_out:0'
         vgg_layer7_out_tensor_name = 'layer7_out:0'
 
-        tf.saved_model.loader.load(sess,[vgg_tag],vgg_path)
+        tf.saved_model.loader.load(self.sess,[vgg_tag],vgg_path)
 
         graph = tf.get_default_graph()
         w1 = graph.get_tensor_by_name(vgg_input_tensor_name)
@@ -53,7 +55,7 @@ class Detection:
         return w1, keep, w3, w4, w7
 #tests.test_load_vgg(Detection.load_vgg, tf)
 
-    def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
+    def layers(self,vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
         """
         Create the layers for a fully convolutional network.  Build skip-layers using the vgg layers.
         :param vgg_layer3_out: TF Tensor for VGG Layer 3 output
@@ -98,7 +100,7 @@ class Detection:
 
 #tests.test_layers(Detection.layers)
 
-    def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
+    def optimize(self,nn_last_layer, correct_label, learning_rate, num_classes):
         """
         Build the TensorFLow loss and optimizer operations.
         :param nn_last_layer: TF Tensor of the last layer in the neural network
@@ -117,7 +119,7 @@ class Detection:
         return logits, train_op, cross_entropy_loss
 #tests.test_optimize(Detection.optimize)
 
-    def train_nn(saver,sess,epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
+    def train_nn(self,epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
                 correct_label, keep_prob, learning_rate):
         """
         Train neural network and print out the loss during training.
@@ -133,38 +135,39 @@ class Detection:
         :param learning_rate: TF Placeholder for learning rate
         """
         # TODO: Implement function
-        sess.run(tf.global_variables_initializer())
+        self.sess.run(tf.global_variables_initializer())
 
         for epoch in range(epochs):
             print("EPOCH {} ...".format(epoch+1))
             for image,label in get_batches_fn(batch_size):
                 ## Training
-                _,loss = sess.run([train_op, cross_entropy_loss], 
+                _,loss = self.sess.run([train_op, cross_entropy_loss], 
                                 feed_dict={input_image: image, correct_label: label,keep_prob: 0.5, learning_rate: 0.0009})
                 print("Loss: = {:.3f}".format(loss))
             print()
-        saver.save(sess,'./semseg')
 
 #tests.test_train_nn(Detection.train_nn)
+    
+    def pipeline(self,image):
+        return helper.gen_video_output(self.sess, self.logits, self.keep_prob, self.image_pl, image, self.image_shape)
+        
 
-    def try_on_video(video_file):
+    def try_on_video(self,video_file):
         clip1 = VideoFileClip(video_file)
-        white_clip = clip1.fl_image(pipeline)
+        white_clip = clip1.fl_image(self.pipeline)
         white_clip.write_videofile("project_output.mp4", audio=False)
 
-    def pipeline(image_file):
-        with tf.Session() as sess:
-            self.saver.restore(self.sess, './semseg')
-            image_outputs = helper.gen_video_output(sess, self.logits, self.keep_prob, self.image, self.image_file, self.image_shape)
-    
+
 def run():
     num_classes = 2
     image_shape = (160, 576)
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
+    training = False
+    testing = False
+    video = False
 
-    #object = Detection()
     # Download pretrained vgg model
     helper.maybe_download_pretrained_vgg(data_dir)
 
@@ -172,12 +175,11 @@ def run():
     # You'll need a GPU with at least 10 teraFLOPS to train on.
     #  https://www.cityscapes-dataset.com/
 
-#   with tf.Graph().as_default():
     with tf.Session() as sess:
         correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
         learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-        epochs = 3
-        batch_size = 5
+        epochs = 1
+        batch_size = 8
 
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
@@ -187,24 +189,38 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
+        object = Detection()
+        object.sess = sess
         # TODO: Build NN using load_vgg, layers, and optimize function
-        input_image, keep_prob, layer_3_out, layer_4_out, layer_7_out = Detection.load_vgg(sess,vgg_path)
-        last_layer = Detection.layers(layer_3_out, layer_4_out, layer_7_out, num_classes)
-        logits, train_op, cross_entropy_loss = Detection.optimize(last_layer, correct_label, learning_rate, num_classes)
-        
-        #saver = tf.train.Saver({'input_image':input_image,'correct_label':correct_label, 'keep_prob':keep_prob,'learning_rate':learning_rate})
-        saver = tf.train.Saver()
-        object = Detection(sess, logits, keep_prob,saver, input_image, image_shape)
+        input_image, keep_prob, layer_3_out, layer_4_out, layer_7_out = object.load_vgg(vgg_path)
+        last_layer = object.layers(layer_3_out, layer_4_out, layer_7_out, num_classes)
+        logits, train_op, cross_entropy_loss = object.optimize(last_layer, correct_label, learning_rate, num_classes)
 
-        # TODO: Train NN using the train_nn function
-       # Detection.train_nn(saver,sess,epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-        #    correct_label, keep_prob, learning_rate)
+        object.logits = logits
+        object.image_pl = input_image
+        object. keep_prob = keep_prob
+        object.image_shape = image_shape
         
-        # TODO: Save inference data using helper.save_inference_samples
-        #  helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
-        #helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
-        # OPTIONAL: Apply the trained model to a video
-        Detection.try_on_video("project_video.mp4")
+        if (training==True):
+            saver = tf.train.Saver()
+            #TODO: Train NN using the train_nn function
+            object.train_nn(epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, 
+                correct_label, keep_prob, learning_rate)
+            saver.save(sess,'./semseg')
+            object.saver = saver
+
+    if((testing==True) or (video == True)):
+        object.saver = tf.train.import_meta_graph("semseg.meta")
+    
+        with tf.Session() as sess:
+            object.saver.restore(sess, tf.train.latest_checkpoint('./'))
+            object.sess = sess
+            #TODO: Save inference data using helper.save_inference_samples
+            if (testing == True):
+                helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
+            # OPTIONAL: Apply the trained model to a video
+            if (video == True):
+                object.try_on_video("project_video.mp4")
 
 if __name__ == '__main__':
     run()

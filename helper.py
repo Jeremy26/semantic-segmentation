@@ -10,6 +10,7 @@ import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
 from tqdm import tqdm
+import matplotlib.image as mpimg
 
 
 class DLProgress(tqdm):
@@ -135,7 +136,6 @@ def gen_video_output(sess, logits, keep_prob, image_pl, image_input, image_shape
     :return: Output for for each test image
     """
     image = scipy.misc.imresize(image_input, image_shape)
-
     im_softmax = sess.run(
         [tf.nn.softmax(logits)],
         {keep_prob: 1.0, image_pl: [image]})
@@ -145,8 +145,7 @@ def gen_video_output(sess, logits, keep_prob, image_pl, image_input, image_shape
     mask = scipy.misc.toimage(mask, mode="RGBA")
     street_im = scipy.misc.toimage(image)
     street_im.paste(mask, box=None, mask=mask)
-    return street_im
-    #yield os.path.basename(image_file), np.array(street_im)
+    return np.array(street_im)
 
 
 def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
