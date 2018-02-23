@@ -115,7 +115,6 @@ class Detection():
         cross_entropy_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
         optimizer = tf.train.AdamOptimizer(learning_rate= learning_rate)
         train_op = optimizer.minimize(cross_entropy_loss)
-
         return logits, train_op, cross_entropy_loss
 #tests.test_optimize(Detection.optimize)
 
@@ -164,7 +163,7 @@ def run():
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
-    training = False
+    training = True
     testing = False
     video = False
 
@@ -180,7 +179,6 @@ def run():
         learning_rate = tf.placeholder(tf.float32, name='learning_rate')
         epochs = 1
         batch_size = 8
-
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
         # Create function to get batches
@@ -202,16 +200,26 @@ def run():
         object.image_shape = image_shape
         
         if (training==True):
-            saver = tf.train.Saver()
+           #saver = tf.train.Saver()
             #TODO: Train NN using the train_nn function
             object.train_nn(epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, 
                 correct_label, keep_prob, learning_rate)
-            saver.save(sess,'./semseg')
-            object.saver = saver
+            #saver.save(sess,'./semseg')
+            #object.saver = saver
 
+            #builder = tf.saved_model.builder.SavedModelBuilder()
+            #object.saver = builder.save()
+            builder = tf.saved_model.builder.SavedModelBuilder(str(os.getcwd()+"/model2"))
+            builder.add_meta_graph_and_variables(sess, ["tag"], signature_def_map= {
+                    "model": tf.saved_model.signature_def_utils.predict_signature_def(
+                        inputs= {"x": input_image},
+                        outputs= {"finalnode": correct_label})
+                    })
+            builder.save()
+        
     if((testing==True) or (video == True)):
         object.saver = tf.train.import_meta_graph("semseg.meta")
-    
+        
         with tf.Session() as sess:
             object.saver.restore(sess, tf.train.latest_checkpoint('./'))
             object.sess = sess
