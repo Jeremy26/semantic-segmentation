@@ -2,6 +2,32 @@
 ### Introduction
 In this project, you'll label the pixels of a road in images using a Fully Convolutional Network (FCN).
 
+[image0]: ./report_images/semseg.gif "GIF"
+[image1]: ./report_images/model.png "MODEL"
+![TAG][image0]
+
+We are working based on this model :
+![TAG2][image1]
+
+The choices of hyperparameters are the following :
+* EPOCHS = 30 :: Works well with a loss of .05
+* Batch Size = 6 :: Decrease if memory errors
+* Loss : CrossEntropyLoss
+* Optimizer : Adam
+* Regularizer : 1e-3
+* Dropout : 0.5
+* Pretrained Model : VGG16
+
+Successes :
+* Use VGG16 Encoder and corresponding Decoder
+* Apply to an entire test set
+* Apply to a video
+* Save Model to reuse it without retraining.
+
+Attempts that may come :
+* Cityscape DataSet for multi classes
+* Inferences Techniques : Frozen Graph, Quantization, Fusion (as you can see, the PB files are already in place)
+
 ### Setup
 ##### Frameworks and Packages
 Make sure you have the following is installed:
