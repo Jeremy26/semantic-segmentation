@@ -164,8 +164,8 @@ def run():
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
     training = True
-    testing = False
-    video = False
+    testing = True
+    video = True
 
     # Download pretrained vgg model
     helper.maybe_download_pretrained_vgg(data_dir)
@@ -177,8 +177,8 @@ def run():
     with tf.Session() as sess:
         correct_label = tf.placeholder(tf.int32, [None, None, None, num_classes], name='correct_label')
         learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-        epochs = 1
-        batch_size = 8
+        epochs = 30
+        batch_size = 6
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
         # Create function to get batches
@@ -200,22 +200,25 @@ def run():
         object.image_shape = image_shape
         
         if (training==True):
-           #saver = tf.train.Saver()
+            saver = tf.train.Saver()
             #TODO: Train NN using the train_nn function
             object.train_nn(epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, 
                 correct_label, keep_prob, learning_rate)
-            #saver.save(sess,'./semseg')
-            #object.saver = saver
+            saver.save(sess,'./ckpt')
+            object.saver = saver
 
-            #builder = tf.saved_model.builder.SavedModelBuilder()
-            #object.saver = builder.save()
-            builder = tf.saved_model.builder.SavedModelBuilder(str(os.getcwd()+"/model2"))
-            builder.add_meta_graph_and_variables(sess, ["tag"], signature_def_map= {
-                    "model": tf.saved_model.signature_def_utils.predict_signature_def(
-                        inputs= {"x": input_image},
-                        outputs= {"finalnode": correct_label})
-                    })
+            builder = tf.saved_model.builder.SavedModelBuilder(str(os.getcwd()+"/model"))
+            builder.add_meta_graph_and_variables(sess,["tag"])
             builder.save()
+    
+    
+    #with tf.Session(graph = tf.Graph()) as sess:
+     #   object.saver = tf.train.import_meta_graph("semseg.meta")
+      #  object.saver.restore(sess, tf.train.latest_checkpoint('./'))
+       # object.sess = sess
+        #builder = tf.saved_model.builder.SavedModelBuilder(str(os.getcwd()+"/model_pb"))
+        #builder.add_meta_graph_and_variables(sess, ["tag"])
+        #builder.save()   
         
     if((testing==True) or (video == True)):
         object.saver = tf.train.import_meta_graph("semseg.meta")
